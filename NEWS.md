@@ -234,6 +234,8 @@ Deprecated or removed
   * The function `showall` is deprecated. Showing entire values is the default, unless an
     `IOContext` specifying `:limit=>true` is in use ([#22847]).
 
+  * `issubtype` has been deprecated in favor of `<:` (which used to be an alias for `issubtype`).
+
 
 Julia v0.6.0 Release Notes
 ==========================
