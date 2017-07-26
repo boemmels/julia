@@ -1121,7 +1121,6 @@ c0 = Base.uncompressed_ast(m0)
 @test isempty(Core.Inference.validate_code(c0))
 
 # InvalidCodeError 1: encountered invalid expression head
-
 c = deepcopy(c0)
 insert!(c.code, 4, Expr(:(=), SlotNumber(2), Expr(:invalid, 1)))
 errors = Core.Inference.validate_code(c)
@@ -1129,7 +1128,6 @@ errors = Core.Inference.validate_code(c)
 @test errors[1].errno == 1
 
 # InvalidCodeError 2: encountered invalid LHS value
-
 c = deepcopy(c0)
 insert!(c.code, 4, Expr(:(=), LabelNode(1), 1))
 insert!(c.code, 2, Expr(:(=), :x, 1))
@@ -1139,37 +1137,90 @@ errors = Core.Inference.validate_code(c)
 @test all(e.errno == 2 for e in errors)
 
 # InvalidCodeError 3: encountered invalid call argument
-# TODO
+c = deepcopy(c0)
+insert!(c.code, 2, Expr(:(=), SlotNumber(2), Expr(:call, :+, SlotNumber(2), GotoNode(1))))
+insert!(c.code, 4, Expr(:call, :-, Expr(:call, :sin, LabelNode(2)), 3))
+insert!(c.code, 10, Expr(:call, LineNumberNode(2)))
+for h in (:gotoifnot, :new, :line, :const, :meta)
+    push!(c.code, Expr(:call, :f, Expr(h)))
+end
+errors = Core.Inference.validate_code(c)
+@test length(errors) == 8
+@test all(e.errno == 3 for e in errors)
 
 # InvalidCodeError 4: slotnames field is empty
-# TODO
+c = deepcopy(c0)
+empty!(c.slotnames)
+errors = Core.Inference.validate_code(c)
+@test length(errors) == 2
+@test any(e.errno == 4 for e in errors)
+@test any(e.errno == 5 for e in errors)
 
 # InvalidCodeError 5: length(slotflags) != length(slotnames)
-# TODO
+c = deepcopy(c0)
+push!(c.slotnames, :dummy)
+errors = Core.Inference.validate_code(c)
+@test length(errors) == 1
+@test errors[1].errno == 5
 
 # InvalidCodeError 6: (for inferred CodeInfo) length(slottypes) != length(slotnames)
-# TODO
+c = @code_typed(f22938(1,2,3,4))[1]
+pop!(c.slottypes)
+errors = Core.Inference.validate_code(c)
+@test length(errors) == 1
+@test errors[1].errno == 6
 
 # InvalidCodeError 7: (for inferred CodeInfo) not all SSAValues in AST have a type in ssavaluetypes
-# TODO
+c = @code_typed(f22938(1,2,3,4))[1]
+empty!(c.ssavaluetypes)
+errors = Core.Inference.validate_code(c)
+@test length(errors) == 1
+@test errors[1].errno == 7
 
 # InvalidCodeError 8: (for uninferred CodeInfo) slottypes field is not `nothing`
-# TODO
+c = deepcopy(c0)
+c.slottypes = 1
+errors = Core.Inference.validate_code(c)
+@test length(errors) == 1
+@test errors[1].errno == 8
 
-# InvalidCodeError 9: (for uninferred CodeInfo) ssavaluetypes field is not length(ssavals)
-# TODO
+# InvalidCodeError 9: (for uninferred CodeInfo) ssavaluetypes field does not equal the number of present SSAValues
+c = deepcopy(c0)
+c.ssavaluetypes -= 1
+errors = Core.Inference.validate_code(c)
+@test length(errors) == 1
+@test errors[1].errno == 9
 
 # InvalidCodeError 10: wrong assignment slotflag setting (bit flag 2 is not set, but should be)
-# TODO
+c = deepcopy(c0)
+c.slotflags[8] = 0x00
+errors = Core.Inference.validate_code(c)
+@test length(errors) == 1
+@test errors[1].errno == 10
 
 # InvalidCodeError 11: number of types in method signature != number of arguments
-# TODO
+old_sig = m0.sig
+m0.sig = Tuple{1,Vararg{Any}}
+errors = Core.Inference.validate_code(m0)
+m0.sig = old_sig
+@test length(errors) == 1
+@test errors[1].errno == 11
 
 # InvalidCodeError 12: last type in method signature does not match `isva` field setting
-# TODO
+m0.isva = false
+errors = Core.Inference.validate_code(m0)
+m0.isva = true
+@test length(errors) == 1
+@test errors[1].errno == 12
 
 # InvalidCodeError 13: encountered Expr head `:method` in non-top-level code
-# TODO
+
+# TODO: This is a tough case to test an isolation...
 
 # InvalidCodeError 14: CodeInfo for method contains fewer slotnames than the number of method arguments
-# TODO
+m0.nargs += 20
+errors = Core.Inference.validate_code(m0)
+m0.nargs -= 20
+@test length(errors) == 2
+@test any(e.errno == 11 for e in errors)
+@test any(e.errno == 14 for e in errors)
